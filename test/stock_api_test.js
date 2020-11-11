@@ -4,7 +4,8 @@ const {expect} = require('chai');
 const https = require('https');
 const axios = require('axios');
 
-const endpoint = 'https://117.50.17.54';
+// const endpoint = 'https://117.50.17.54';
+const endpoint = 'http://127.0.0.1:5003';
 const ca = `-----BEGIN CERTIFICATE-----
 MIICfDCCAWQCCQCy2gskHG0ZMDANBgkqhkiG9w0BAQsFADAAMB4XDTIwMTEwOTA5
 MDU0NloXDTMwMTEwNzA5MDU0NlowADCCASIwDQYJKoZIhvcNAQEBBQADggEPADCC
@@ -42,6 +43,7 @@ const baseOptions = {
 
 // 简单测试搬运接口
 describe('stock banjia basic tests', function() {
+  this.timeout(10000);
   
   // 测试接口可用
   it('api works', async function() {
@@ -69,5 +71,57 @@ describe('stock banjia basic tests', function() {
     expect(response.data.status).to.eq(0);
     expect(response.data.message).to.eq('OK');
     console.log(response.data.data);
+  });
+
+  // 创建或更新素材元数据
+  it('create or update stock', async function() {
+    const response = await axios({
+      ...baseOptions,
+      method: 'POST',
+      url: '/stock/transport/stock',
+      data: {
+        identity: '1',
+        stockType: 'ae',
+        stockIdentity: '5056795',
+        title: '卡通生气',
+        price: 100000,
+        category: ['全部','AE模板','其他AE模板','卡通生气'],
+        tag: ['卡通','生气','表情包','可爱','卡哇伊'],
+        content: '卡通生气',
+        resolutionRatio: '1920x1080',
+        minAeVersion: 'After Effects CC2017',
+        modifyRange: '全部是分层内容'
+      },
+    });
+    expect(response.status).to.eq(200);
+    expect(response.data).to.be.an('object');
+    expect(response.data.status).to.eq(0);
+    expect(response.data.message).to.eq('OK');
+    console.log(response.data);
+  });
+
+  // 获取素材文件上传 token
+  it('get upload token', async function() {
+    const response = await axios({
+      ...baseOptions,
+      method: 'POST',
+      url: '/stock/transport/upload-token',
+      data: {
+        identity: '1',
+        stockType: 'ae',
+        stockIdentity: '5056795',
+        resourceType: 'ae_source',
+        resourceIdentity: 'd6e4dbf14a8cd08a09f61bfb29ca9441',
+        fileSize: 1024 * 200 * 5,
+        filePartSize: 1024 * 200,
+        fileMimeType: 'application/zip',
+        fileName: '22d86f0cf4e.zip',
+      },
+    });
+    expect(response.status).to.eq(200);
+    expect(response.data).to.be.an('object');
+    expect(response.data.status).to.eq(0);
+    expect(response.data.message).to.eq('OK');
+    console.log(JSON.stringify(response.data.data));
   });
 })
