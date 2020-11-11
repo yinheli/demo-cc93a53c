@@ -4,8 +4,8 @@ const {expect} = require('chai');
 const https = require('https');
 const axios = require('axios');
 
-// const endpoint = 'https://117.50.17.54';
-const endpoint = 'http://127.0.0.1:5003';
+const endpoint = 'https://117.50.17.54';
+// const endpoint = 'http://127.0.0.1:5003';
 const ca = `-----BEGIN CERTIFICATE-----
 MIICfDCCAWQCCQCy2gskHG0ZMDANBgkqhkiG9w0BAQsFADAAMB4XDTIwMTEwOTA5
 MDU0NloXDTMwMTEwNzA5MDU0NlowADCCASIwDQYJKoZIhvcNAQEBBQADggEPADCC
