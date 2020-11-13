@@ -165,6 +165,7 @@ describe('stock banjia basic tests', function() {
       if (n <= 0) {
         break;
       }
+      console.log('upload :', i, ", len:", n);
       const response = await axios({
         method: 'PUT',
         baseURL: upload.original.uploadDomain,
