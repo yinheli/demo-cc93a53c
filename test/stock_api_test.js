@@ -170,7 +170,6 @@ describe('stock banjia basic tests', function() {
         baseURL: upload.original.uploadDomain,
         url: `/${upload.original.key}?partNumber=${i}&uploadId=${uploadId}`,
         data: Buffer.from(buffer, 0, n),
-        validateStatus: () => true,
         headers: {
           'Content-Type': '',
           'Cache-Control': 'no-cache',
