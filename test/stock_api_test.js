@@ -3,6 +3,10 @@ const {expect} = require('chai');
 
 const https = require('https');
 const axios = require('axios');
+const mime = require('mime-types');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 
 const endpoint = 'https://117.50.17.54';
 // const endpoint = 'http://127.0.0.1:5003';
@@ -39,6 +43,21 @@ const baseOptions = {
   method: 'GET',
   baseURL: endpoint,
   timeout: 5000,
+}
+
+// util
+async function fileSha1(file) {
+  sha1 = crypto.createHash('sha1');
+  sha1.setEncoding('hex');
+  let stream = fs.createReadStream(file, {flags: 'r', highWaterMark: 1024 * 64, autoClose: true, start: 0})
+  stream.pipe(sha1);
+  return await new Promise((resolve, reject) => {
+    stream.on('end', () => {
+      sha1.end();
+      resolve(sha1.read());
+    });
+    stream.on('error', reject);
+  })
 }
 
 // 简单测试搬运接口
@@ -81,8 +100,8 @@ describe('stock banjia basic tests', function() {
       url: '/stock/transport/stock',
       data: {
         identity: '1',
-        stockType: 'ae',
-        stockIdentity: '5056795',
+        stockType: 'footage',
+        stockIdentity: '5056796',
         title: '卡通生气',
         price: 100000,
         category: ['全部','AE模板','其他AE模板','卡通生气'],
@@ -101,6 +120,13 @@ describe('stock banjia basic tests', function() {
   });
 
   // 获取素材文件上传 token
+  const file = './assets/demo.mp4';
+  const stat = fs.statSync(file);
+  const mimeType = mime.lookup(file);
+  const chunkSize = 1024 * 512; // 分片大小
+
+  let upload = {};
+
   it('get upload token', async function() {
     const response = await axios({
       ...baseOptions,
@@ -109,13 +135,13 @@ describe('stock banjia basic tests', function() {
       data: {
         identity: '1',
         stockType: 'ae',
-        stockIdentity: '5056795',
-        resourceType: 'ae_source',
-        resourceIdentity: 'd6e4dbf14a8cd08a09f61bfb29ca9441',
-        fileSize: 1024 * 200 * 5,
-        filePartSize: 1024 * 200,
-        fileMimeType: 'application/zip',
-        fileName: '22d86f0cf4e.zip',
+        stockIdentity: '5056796',
+        resourceType: 'footage_source',
+        resourceIdentity: await fileSha1(file), // 用文件的 sha1 作为标识
+        fileSize: stat.size,
+        filePartSize: chunkSize,
+        fileMimeType: mimeType,
+        fileName: path.basename(file),
       },
     });
     expect(response.status).to.eq(200);
@@ -123,5 +149,42 @@ describe('stock banjia basic tests', function() {
     expect(response.data.status).to.eq(0);
     expect(response.data.message).to.eq('OK');
     console.log(JSON.stringify(response.data.data));
+    upload = response.data.data; // 获取上传 token 信息，后面要用到
   });
+
+  // 分片上传文件
+  it('upload data', async function() {
+    const signature = upload.original.signature;
+    const accessKeyId = upload.original.accessKeyId;
+    const uploadId = upload.original.uploadId;
+    
+    const buffer = Buffer.alloc(chunkSize);
+    const fd = fs.openSync(file, 'r');
+    for (let i = 1; i < signature.length+1; i++) {
+      const n = fs.readSync(fd, buffer);
+      if (n <= 0) {
+        break;
+      }
+      const response = await axios({
+        method: 'PUT',
+        baseURL: upload.original.uploadDomain,
+        url: `/${upload.original.key}?partNumber=${i}&uploadId=${uploadId}`,
+        data: Buffer.from(buffer, 0, n),
+        validateStatus: () => true,
+        headers: {
+          'Content-Type': '',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+          'Authorization': `KSS ${accessKeyId}:${signature[i-1]}`,
+        },
+      });
+      expect(response.status).to.eq(200);
+      // console.log(response.request._header);
+      // console.log(response.status, response.statusText);
+      // console.log(response.headers);
+      // console.log(response.data);
+    }
+    console.log('upload done, todo upload finish');
+    // TODO finish upload
+  })
 })
