@@ -1,8 +1,8 @@
-const {describe, it} = require('mocha');
-const {expect} = require('chai');
+const { describe, it } = require('mocha');
+const { expect } = require('chai');
 
 const https = require('https');
-const axios = require('axios');
+const fetch = require('node-fetch');
 const mime = require('mime-types');
 const fs = require('fs');
 const path = require('path');
@@ -28,28 +28,35 @@ zCyIBb9EgD0s6Om4tNdjaA==
 -----END CERTIFICATE-----
 `;
 
+
+const agent = new https.Agent({
+  ca,
+  keepAlive: true,
+  checkServerIdentity: (host, cert) => { },
+  // enableTrace: true,
+})
+
+const url = (path) => {
+  return `https://dev_a534e4b154:d8d1197a6720aa2cfe40bf472221@117.50.17.54${path}`;
+}
+
 // axios 基础配置
-const baseOptions = {
-  httpsAgent: new https.Agent({
-    ca,
-    keepAlive: true,
-    checkServerIdentity: (host, cert) => {},
-    // enableTrace: true,
-  }),
-  auth: {
-    username: 'dev_a534e4b154',
-    password: 'd8d1197a6720aa2cfe40bf472221'
-  },
-  method: 'GET',
-  baseURL: endpoint,
-  timeout: 5000,
+const base = {
+  agent,
+}
+
+const jsonHeaders = {
+  headers: {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json'
+  }
 }
 
 // util
 async function fileSha1(file) {
   sha1 = crypto.createHash('sha1');
   sha1.setEncoding('hex');
-  let stream = fs.createReadStream(file, {flags: 'r', highWaterMark: 1024 * 64, autoClose: true, start: 0})
+  let stream = fs.createReadStream(file, { flags: 'r', highWaterMark: 1024 * 64, autoClose: true, start: 0 })
   stream.pipe(sha1);
   return await new Promise((resolve, reject) => {
     stream.on('end', () => {
@@ -61,130 +68,160 @@ async function fileSha1(file) {
 }
 
 // 简单测试搬运接口
-describe('stock banjia basic tests', function() {
-  this.timeout(10000);
-  
+describe('stock banjia basic tests', function () {
   // 测试接口可用
-  it('api works', async function() {
-    const response = await axios({
-      ...baseOptions,
-      url: '/stock/transport/',
-    });
+  it('api works', async function () {
+    const response = await fetch(url('/stock/transport/'), { ...base });
     expect(response.status).to.eq(200);
-    expect(response.data).to.eq('api works');
+    const body = await response.text();
+    expect(body).to.eq('api works');
   });
 
   // 获取平台资源领取码
-  it('get exchange code', async function() {
-    const response = await axios({
-      ...baseOptions,
+  it('get exchange code', async function () {
+    const response = await fetch(url('/stock/transport/acquire-exchange-code'), {
+      ...base,
+      ...jsonHeaders,
       method: 'POST',
-      url: '/stock/transport/acquire-exchange-code',
-      data: {
+      body: JSON.stringify({
         'identity': '1',
         'nickname': '张三',
-      },
+      })
     });
     expect(response.status).to.eq(200);
-    expect(response.data).to.be.an('object');
-    expect(response.data.status).to.eq(0);
-    expect(response.data.message).to.eq('OK');
-    console.log(response.data.data);
+    const body = await response.json();
+    expect(body).to.be.an('object');
+    expect(body.status).to.eq(0);
+    expect(body.message).to.eq('OK');
+    console.log(body.data);
   });
 
   // 创建或更新素材元数据
-  it('create or update stock', async function() {
-    const response = await axios({
-      ...baseOptions,
+  it('create or update stock', async function () {
+    const response = await fetch(url('/stock/transport/stock'), {
+      ...base,
+      ...jsonHeaders,
       method: 'POST',
-      url: '/stock/transport/stock',
-      data: {
+      body: JSON.stringify({
         identity: '1',
         stockType: 'footage',
-        stockIdentity: '5056796',
+        stockIdentity: '100',
         title: '卡通生气',
         price: 100000,
-        category: ['全部','AE模板','其他AE模板','卡通生气'],
-        tag: ['卡通','生气','表情包','可爱','卡哇伊'],
+        category: ['全部', 'AE模板', '其他AE模板', '卡通生气'],
+        tag: ['卡通', '生气', '表情包', '可爱', '卡哇伊'],
         content: '卡通生气',
         resolutionRatio: '1920x1080',
         minAeVersion: 'After Effects CC2017',
         modifyRange: '全部是分层内容'
-      },
-    });
+      })
+    })
     expect(response.status).to.eq(200);
-    expect(response.data).to.be.an('object');
-    expect(response.data.status).to.eq(0);
-    expect(response.data.message).to.eq('OK');
-    console.log(response.data);
+    const body = await response.json();
+    expect(body).to.be.an('object');
+    expect(body.status).to.eq(0);
+    expect(body.message).to.eq('OK');
+    console.log(body);
   });
 
   // 获取素材文件上传 token
   const file = './assets/demo.mp4';
   const stat = fs.statSync(file);
   const mimeType = mime.lookup(file);
-  const chunkSize = 1024 * 512; // 分片大小
+  const chunkSize = stat.size > 1024 * 1024 * 5 ? 1024 * 1024 * 5 : 1024 * 200; // 分片大小
+  let resourceIdentity = '';
 
   let upload = {};
 
-  it('get upload token', async function() {
-    const response = await axios({
-      ...baseOptions,
+  it('get upload token', async function () {
+    resourceIdentity = await fileSha1(file);
+    const response = await fetch(url('/stock/transport/upload-token'), {
+      ...base,
+      ...jsonHeaders,
       method: 'POST',
-      url: '/stock/transport/upload-token',
-      data: {
+      body: JSON.stringify({
         identity: '1',
-        stockType: 'ae',
-        stockIdentity: '5056796',
+        stockType: 'footage',
+        stockIdentity: '100',
         resourceType: 'footage_source',
-        resourceIdentity: await fileSha1(file), // 用文件的 sha1 作为标识
+        resourceIdentity, // 用文件的 sha1 作为标识
         fileSize: stat.size,
         filePartSize: chunkSize,
         fileMimeType: mimeType,
         fileName: path.basename(file),
-      },
-    });
+      })
+    })
     expect(response.status).to.eq(200);
-    expect(response.data).to.be.an('object');
-    expect(response.data.status).to.eq(0);
-    expect(response.data.message).to.eq('OK');
-    console.log(JSON.stringify(response.data.data));
-    upload = response.data.data; // 获取上传 token 信息，后面要用到
+    const body = await response.json();
+    expect(body).to.be.an('object');
+    expect(body.status).to.eq(0);
+    expect(body.message).to.eq('OK');
+    console.log(JSON.stringify(body));
+    upload = body.data; // 获取上传 token 信息，后面要用到
   });
 
   // 分片上传文件
-  it('upload data', async function() {
+  it('upload data', async function () {
     const signature = upload.original.signature;
     const accessKeyId = upload.original.accessKeyId;
     const uploadId = upload.original.uploadId;
-    
-    const buffer = Buffer.alloc(chunkSize);
-    const fd = fs.openSync(file, 'r');
-    for (let i = 1; i < signature.length+1; i++) {
-      const n = fs.readSync(fd, buffer);
-      if (n <= 0) {
-        break;
+
+    const uploadTasks = [];
+    let partNumber = 1;
+    let finishXml = '<CompleteMultipartUpload>';
+    for (let pos = 0; pos < stat.size; pos += chunkSize) {
+      const sign = signature[partNumber - 1];
+      const uploadUrl = `${upload.original.uploadDomain}/${upload.original.key}?partNumber=${partNumber}&uploadId=${uploadId}`;
+      const start = pos;
+      let end = pos + chunkSize - 1;
+      if (end > stat.size) {
+        end = stat.size - 1;
       }
-      console.log('upload :', i, ", len:", n);
-      const response = await axios({
+      const stream = fs.createReadStream(file, { flags: 'r', autoClose: true, start, end });
+      uploadTasks.push(fetch(uploadUrl, {
         method: 'PUT',
-        baseURL: upload.original.uploadDomain,
-        url: `/${upload.original.key}?partNumber=${i}&uploadId=${uploadId}`,
-        data: Buffer.from(buffer, 0, n),
         headers: {
-          'Content-Type': '',
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache',
-          'Authorization': `KSS ${accessKeyId}:${signature[i-1]}`,
+          'Authorization': `KSS ${accessKeyId}:${sign}`,
+          'Content-Length': end - start + 1,
         },
-      });
-      expect(response.status).to.eq(200);
-      // console.log(response.request._header);
-      // console.log(response.status, response.statusText);
-      // console.log(response.headers);
-      // console.log(response.data);
+        body: stream,
+      }));
+      finishXml += `<Part><PartNumber>${partNumber}</PartNumber><ETag>null</ETag></Part>`
+      partNumber++;
     }
-    console.log('upload done, todo upload finish');
-    // TODO finish upload
+    finishXml += '</CompleteMultipartUpload>';
+    const uploadResults = await Promise.all(uploadTasks);
+    for (let it of uploadResults) {
+      expect(it.status).to.eq(200);
+    }
+    console.log('upload done');
+
+    // upload finish
+    const response = await fetch(url('/stock/transport/upload-finish'), {
+      ...base,
+      ...jsonHeaders,
+      method: 'POST',
+      body: JSON.stringify({
+        identity: '1',
+        uploadNo: upload.uploadNo,
+        stockIdentity: '100',
+        resourceIdentity: resourceIdentity,
+        data: {
+          uploadId,
+          contentType: 'application/json',
+          body: finishXml,
+        }
+      })
+    })
+    console.log(response);
+    expect(response.status).to.eq(200);
+    const body = await response.json();
+    console.log(body);
+    expect(body).to.be.an('object');
+    expect(body.status).to.eq(0);
+    expect(body.message).to.eq('OK');
+    console.log(JSON.stringify(body));
   })
 })

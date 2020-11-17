@@ -4,15 +4,15 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "mocha"
+    "test": "mocha --timeout 10000"
   },
   "keywords": [],
   "license": "ISC",
   "dependencies": {
-    "axios": "^0.21.0",
     "chai": "^4.2.0",
     "mime-types": "^2.1.27",
     "mocha": "^8.2.1",
+    "node-fetch": "^2.6.1",
     "nyc": "^15.1.0"
   }
 }
